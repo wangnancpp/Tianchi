@@ -72,7 +72,7 @@ def writeout(filename,data_list):
 		fout.write('\n')
 	fout.close()
 
-
-result=loadfile('ccf_offline_stage1_train.csv')
-writeout('normal_ccf_offline_stage1_train.csv',result)
+data_path = "/Users/wangnan/Data/Tianchi/"
+result=loadfile(data_path + 'ccf_offline_stage1_train.csv')
+writeout(data_path + 'normal_ccf_offline_stage1_train.csv',result)
 
