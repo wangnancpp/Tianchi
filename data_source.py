@@ -109,6 +109,14 @@ class DataSource:
 		fout.close()
 
 if __name__=='__main__':
+	input_file_name = "head10"#"ccf_offline_stage1_train.csv"
+	# test load file
+	origin_data = np.loadtxt(input_file_name, dtype=np.str, delimiter=",")
+	print origin_data.shape
+	print origin_data.ndim
+	print origin_data.size
+	print origin_data.dtype
+	sys.exit()
 	train_ratio = 0.7
 	print "starting"
 	data_source = DataSource()
