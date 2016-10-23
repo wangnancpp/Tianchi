@@ -7,6 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn import svm
 from sklearn import cross_validation
+import data_stat
 
 class Model:
 	model = None
@@ -27,9 +28,14 @@ class Model:
 	def predict(self, test_data, test_label):
 		expected = test_label
 		predicted = self.model.predict(test_data)
+		predicted_prob = self.model.predict_proba(test_data)
+		print "predicted_prob"
+		print predicted_prob
+		print "==========================="
 		print(metrics.classification_report(expected, predicted))
-		print(metrics.confusion_matrix(expected, predicted))
-
+		#print(metrics.confusion_matrix(expected, predicted))
+		print(metrics.roc_auc_score(expected, predicted))
+		print self.model.coef_[0]
 		
 if __name__ == "__main__":
 	file_name = "ccf_offline_stage1_train.csv"
@@ -38,7 +44,7 @@ if __name__ == "__main__":
 	print features
 	print labels
 	#sys.exit()
-	(X_train, X_test, y_train, y_test) = cross_validation.train_test_split(features, labels, test_size=0.4)
+	(X_train, X_test, y_train, y_test) = cross_validation.train_test_split(features, labels, test_size=0.3)
 	 
 	model  = Model()
 	model.train(X_train, y_train)

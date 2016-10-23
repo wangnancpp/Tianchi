@@ -5,6 +5,14 @@ import os
 import numpy as np 
 import codecs
 import random
+import datetime
+import data_statistics
+from sklearn import cross_validation
+from sklearn import metrics
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn import svm
+import model_train
 
 class DataSource:
 	
@@ -22,7 +30,12 @@ class DataSource:
 		except:
 			return 0
 
-
+	# base date for date normalize
+	base_date = datetime.datetime(2016, 01, 01)
+	def get_days(self, date_str):
+		d = datetime.datetime.strptime(date_str,'%Y%m%d')
+		return (d - self.base_date).days
+		
 	def splitlist(self, result, result1):
 		result_sum=[]
 		for i in range(len(result)):
@@ -32,7 +45,8 @@ class DataSource:
 				result_sum.append(result[i])
 		print "split list done"
 		return result_sum
-
+		
+	# split data into train data and test data
 	def split_data(self, total_list, train_ratio):
 		data_size = len(total_list)
 		if data_size <= 0:
@@ -97,7 +111,138 @@ class DataSource:
 		fin.close()
 		return result
 
+	# load origin data, data type is numpy
+	def load_data(self, path):
+		return np.loadtxt(path, dtype=np.str, delimiter=",")
 
+	# data with mocked label
+	def load_normalize_data(self, path):
+		# all offline data load
+		origin_data = self.load_data(path)
+		return self.normalize_data(origin_data)
+
+	def normalize_data(self, origin_data):
+        
+		# num of rows
+		rows = origin_data.shape[0]
+		# labels 
+		labels =np.arange(rows, dtype = np.int) #  np.empty([rows, 1], dtype = np.float)
+		
+		# features array
+		features = np.empty([rows, 9], dtype = np.int)
+		
+		#load stat data
+		data_stat = data_statistics.Stat()
+		data_stat.stat(origin_data)
+		
+		user_stat = data_stat.data_stat["users"]
+		merchant_stat = data_stat.data_stat["merchants"]
+		coupon_stat = data_stat.data_stat["coupons"]
+		
+		for i in xrange(len(origin_data)):
+			row = origin_data[i]
+			
+			uid = row[0]
+			mid = row[1]
+			coupon_id = row[2]
+			discount_rate = row[3]
+			distance = row[4]
+			date_received = row[5]
+			date = row[6]
+			
+			# to 
+			feature = features[i]
+			
+			# discount_rate
+			f_discount_rate = -1.0
+			if discount_rate != 'null':
+				try:
+					if discount_rate.find(":") >= 0:
+						strs = discount_rate.split(':')
+						f_discount_rate = float(strs[1]) / float(strs[0])
+						feature[-1] = float(strs[0])
+					else:
+						f_discount_rate = float(discount_rate)
+							
+				except:
+					feature[-1] = 0
+			
+			# distance	
+			f_distance = -1.0
+			if distance != "null":
+				f_distance = float(distance)
+				
+			# numerical date
+			d_received = -1 # date receive coupon
+			d_date = -1 # date consume
+			d_diff = -1 # diff date
+			
+			if date != "null":
+				d_date = self.get_days(date)
+			if date_received != "null":
+				d_received = self.get_days(date_received)
+			if d_date >= 0 and d_received >= 0:
+				d_diff = d_date - d_received
+				
+			# set labels
+			if date == "null" and coupon_id != "null":
+				labels[i] = 0
+			elif date != "null" and coupon_id == "null":
+				labels[i] = 1#!!!!!!!0 or 1
+			elif date == "null" and coupon_id == "null":
+				labels[i] = 0
+				
+			elif date != "null" and coupon_id != "null":
+				if d_diff < 15:
+					labels[i] = 1
+				else:
+					labels[i] = 1
+			# collect feature
+			
+			feature[0] = f_discount_rate
+			feature[1] = f_distance
+			
+			# user feature
+			user_coupons = -1
+			user_consume = -1
+			if uid in user_stat:
+				user_stat_item = user_stat[uid]
+				if "num_coupons" in user_stat_item:
+					user_coupons = user_stat_item["num_coupons"]
+				if "num_consumes" in user_stat_item:
+					user_consume = user_stat_item["num_consumes"]
+				 
+			feature[2] = user_coupons
+			feature[3] = user_consume
+			
+			# merchant feature
+			merchant_coupons = -1
+			merchant_consume = -1
+			if mid in merchant_stat:
+				merchant_stat_item = merchant_stat[mid]
+				if "num_coupons" in merchant_stat_item:
+					merchant_coupons = merchant_stat_item["num_coupons"]
+				if "num_consumes" in merchant_stat_item:
+					merchant_consume = merchant_stat_item["num_consumes"]
+					
+			feature[4] = merchant_coupons
+			feature[5] = merchant_coupons
+			
+			# coupon feature
+			coupon_coupons = -1
+			coupon_consume = -1
+			if coupon_id in coupon_stat:
+				coupon_stat_item = coupon_stat[coupon_id]
+				if "num_coupons" in coupon_stat_item:
+					coupon_coupons = coupon_stat_item["num_coupons"]
+				if "num_consumes" in coupon_stat_item:
+					coupon_consume = coupon_stat_item["num_consumes"]
+			
+			feature[6] = coupon_coupons
+			feature[7] = coupon_consume
+			
+			# 
+		return (features, labels)
 
 	def writeout(self,filename,data_list):
 		print "start writing"
@@ -109,30 +254,19 @@ class DataSource:
 		fout.close()
 
 if __name__=='__main__':
-	input_file_name = "head10"#"ccf_offline_stage1_train.csv"
-	# test load file
-	origin_data = np.loadtxt(input_file_name, dtype=np.str, delimiter=",")
-	print origin_data.shape
-	print origin_data.ndim
-	print origin_data.size
-	print origin_data.dtype
-	sys.exit()
-	train_ratio = 0.7
-	print "starting"
+	input_file_name = "ccf_offline_stage1_train.csv"
 	data_source = DataSource()
-	result=data_source.loadfile('ccf_offline_stage1_train.csv')
-	print "read total data %d lines" %(len(result))
+	all_data = data_source.load_data(input_file_name)
 	
-	print "start split_data"
-	(train_list, test_list) = data_source.split_data(result, train_ratio)
-	print "train size %d, test size %d" % (len(train_list), len(test_list))
-	sys.exit()
+	(X_train, X_test, y_train, y_test) = cross_validation.train_test_split(all_data, 
+		np.arange(all_data.shape[0]), test_size=0.3)
+	(train_features, train_labels) = data_source.normalize_data(X_train)
+	(test_features, test_labels) = data_source.normalize_data(X_test)
 	
-	print "the first is :"
-	result_test=random.sample(result,int(len(result) * train_ratio))
-	print "the second is :"
-	result_train=data_source.splitlist(result,result_test)
-	writeout('normal_ccf_offline_stage1_train.csv',result_train)
-	writeout('normal_ccf_offline_stage1_test.csv',result_test)
-
-
+	print train_features.shape
+	print train_labels.shape
+	
+	model = model_train.Model()
+	model.train(train_features, train_labels)
+	model.predict(test_features, test_labels)
+	
