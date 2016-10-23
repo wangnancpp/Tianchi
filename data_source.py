@@ -13,6 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn import svm
 import model_train
+import matplotlib.pyplot as plt
 
 class DataSource:
 	
@@ -121,6 +122,16 @@ class DataSource:
 		origin_data = self.load_data(path)
 		return self.normalize_data(origin_data)
 
+	def generate_label(self, row):
+		if len(row) > 6:
+			date = row[6]
+			if date != 'null':
+				return 1
+			else:
+				return 0
+		else:
+			return -1
+
 	def normalize_data(self, origin_data):
         
 		# num of rows
@@ -148,9 +159,11 @@ class DataSource:
 			discount_rate = row[3]
 			distance = row[4]
 			date_received = row[5]
-			date = row[6]
 			
-			# to 
+			#set label
+			labels[i] = self.generate_label(row)
+			
+			# to get feature
 			feature = features[i]
 			
 			# discount_rate
@@ -171,32 +184,7 @@ class DataSource:
 			f_distance = -1.0
 			if distance != "null":
 				f_distance = float(distance)
-				
-			# numerical date
-			d_received = -1 # date receive coupon
-			d_date = -1 # date consume
-			d_diff = -1 # diff date
-			
-			if date != "null":
-				d_date = self.get_days(date)
-			if date_received != "null":
-				d_received = self.get_days(date_received)
-			if d_date >= 0 and d_received >= 0:
-				d_diff = d_date - d_received
-				
-			# set labels
-			if date == "null" and coupon_id != "null":
-				labels[i] = 0
-			elif date != "null" and coupon_id == "null":
-				labels[i] = 1#!!!!!!!0 or 1
-			elif date == "null" and coupon_id == "null":
-				labels[i] = 0
-				
-			elif date != "null" and coupon_id != "null":
-				if d_diff < 15:
-					labels[i] = 1
-				else:
-					labels[i] = 1
+
 			# collect feature
 			
 			feature[0] = f_discount_rate
@@ -205,12 +193,12 @@ class DataSource:
 			# user feature
 			user_coupons = -1
 			user_consume = -1
-			if uid in user_stat:
-				user_stat_item = user_stat[uid]
-				if "num_coupons" in user_stat_item:
-					user_coupons = user_stat_item["num_coupons"]
-				if "num_consumes" in user_stat_item:
-					user_consume = user_stat_item["num_consumes"]
+			# if uid in user_stat:
+			# 	user_stat_item = user_stat[uid]
+			# 	if "num_coupons" in user_stat_item:
+			# 		user_coupons = user_stat_item["num_coupons"]
+			# 	if "num_consumes" in user_stat_item:
+			# 		user_consume = user_stat_item["num_consumes"]
 				 
 			feature[2] = user_coupons
 			feature[3] = user_consume
@@ -231,12 +219,12 @@ class DataSource:
 			# coupon feature
 			coupon_coupons = -1
 			coupon_consume = -1
-			if coupon_id in coupon_stat:
-				coupon_stat_item = coupon_stat[coupon_id]
-				if "num_coupons" in coupon_stat_item:
-					coupon_coupons = coupon_stat_item["num_coupons"]
-				if "num_consumes" in coupon_stat_item:
-					coupon_consume = coupon_stat_item["num_consumes"]
+			# if coupon_id in coupon_stat:
+			# 	coupon_stat_item = coupon_stat[coupon_id]
+			# 	if "num_coupons" in coupon_stat_item:
+			# 		coupon_coupons = coupon_stat_item["num_coupons"]
+			# 	if "num_consumes" in coupon_stat_item:
+			# 		coupon_consume = coupon_stat_item["num_consumes"]
 			
 			feature[6] = coupon_coupons
 			feature[7] = coupon_consume
@@ -253,20 +241,77 @@ class DataSource:
 			fout.write('\n')
 		fout.close()
 
+def generate_test_result():
+	# train with all offline data
+	train_file = "ccf_offline_stage1_train.csv"
+	test_file = "ccf_offline_stage1_test_revised.csv"
+	data_source = DataSource()
+	(train_features, train_labels) = data_source.load_normalize_data(train_file)
+	(test_features, test_labels) = data_source.load_normalize_data(test_file)
+	
+	#
+	model = model_train.Model()
+	model.train(train_features, train_labels)
+	#model.predict(test_features, test_labels)
+	predicted_prob = model.model.predict_proba(test_features)
+	
+	fout = open("test.label.out", "w")
+	test_lines = open(test_file).readlines()
+	for i in xrange(len(test_lines)):
+		line = test_lines[i].strip()
+		fout.write(line + "," + str(round(predicted_prob[i][1], 1)) + "\n")
+	fout.close()
+		
+	
 if __name__=='__main__':
+	#generate_test_result()
+	#sys.exit()
+	
 	input_file_name = "ccf_offline_stage1_train.csv"
 	data_source = DataSource()
 	all_data = data_source.load_data(input_file_name)
 	
+	#split data into train and test
+
+	# train_list = []
+	# test_list = []
+	# for item in all_data:
+	# 	if item[5] != "null":
+	# 		if data_source.get_days(item[5]) > 150:
+	# 			test_list.append(item)
+	# 		else:
+	# 			train_list.append(item)
+	# 	else:
+	# 		test_list.append(item)
+			
+	# X_train = np.array(train_list)
+	# X_test = np.array(test_list)
+	
 	(X_train, X_test, y_train, y_test) = cross_validation.train_test_split(all_data, 
 		np.arange(all_data.shape[0]), test_size=0.3)
+	# 
 	(train_features, train_labels) = data_source.normalize_data(X_train)
 	(test_features, test_labels) = data_source.normalize_data(X_test)
 	
+	print train_labels
 	print train_features.shape
 	print train_labels.shape
+	print test_features.shape
+	print test_labels.shape
 	
 	model = model_train.Model()
 	model.train(train_features, train_labels)
 	model.predict(test_features, test_labels)
+	
+	predicted_prob = model.model.predict_proba(test_features)
+	
+	# Plot outputs
+	# plt.scatter(test_features, test_labels,  color='black')
+	# plt.plot(test_features, model.model.predict(test_features), color='blue',
+	# 		linewidth=3)
+
+	# plt.xticks(())
+	# plt.yticks(())
+
+	# plt.show()
 	
